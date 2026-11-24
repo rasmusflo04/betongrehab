@@ -173,24 +173,60 @@ function settTema() { const t = S.tema; document.documentElement.style.colorSche
 settTema();
 
 // ---------- flytt fremgang mellom appene ----------
-const OV_PREFIKS = "BETONGREHAB-FREMGANG:";
+const OV_GAMMEL = "BETONGREHAB-FREMGANG:", OV_NY = "BRF2:";
+const b64u = buf => { let s = ""; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const fraB64u = t => { const s = atob(t.replace(/-/g, "+").replace(/_/g, "/")); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
+async function lagKode() {
+  const json = JSON.stringify(S);
+  try { const z = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer(); return OV_NY + b64u(z); }
+  catch (_) { return OV_GAMMEL + json; }
+}
+async function lesKode(t) {
+  t = String(t || "");
+  let i = t.indexOf(OV_NY);
+  if (i >= 0) {
+    const data = t.slice(i + OV_NY.length).replace(/[^A-Za-z0-9_-]/g, "");
+    const json = await new Response(new Blob([fraB64u(data)]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+    return JSON.parse(json);
+  }
+  i = t.indexOf(OV_GAMMEL);
+  if (i >= 0) return JSON.parse(t.slice(i + OV_GAMMEL.length).trim());
+  throw Object.assign(new Error("ukjent"), { code: "ukjent" });
+}
+async function kopier(tekst, ta) {
+  try { await navigator.clipboard.writeText(tekst); return true; } catch (_) {}
+  try { ta.value = tekst; ta.readOnly = true; ta.focus(); ta.setSelectionRange(0, tekst.length); const ok = document.execCommand("copy"); ta.readOnly = false; if (ok) return true; } catch (_) {}
+  return false;
+}
+function hentInn(data, msg) {
+  const før = Object.keys(S.kort).length, førT = Object.keys(S.tester || {}).length;
+  flett(data); lagre();
+  msg.textContent = `Hentet inn ✓ Prøver: ${Object.keys(S.tester || {}).length} (før ${førT}). Øvde kort: ${Object.keys(S.kort).length} (før ${før}).`;
+  setTimeout(hjem, 2500);
+}
 function bindOverfor() {
   const ta = app.querySelector("#ov-tekst"), msg = app.querySelector("#ov-msg"); if (!ta) return;
   app.querySelector("#ov-kopier").onclick = async () => {
-    const kode = OV_PREFIKS + JSON.stringify(S);
-    try { await navigator.clipboard.writeText(kode); msg.textContent = "Kopiert ✓ Åpne den andre appen og lim inn under «Flytt fremgang»."; }
-    catch (_) { ta.value = kode; ta.focus(); ta.select(); msg.textContent = "Teksten er markert i feltet over – trykk Kopier (eller hold fingeren og velg Kopier)."; }
+    const kode = await lagKode();
+    if (await kopier(kode, ta)) { ta.value = ""; msg.textContent = `Kopiert ✓ (${kode.length} tegn). Åpne den andre appen og lim inn under «Flytt fremgang».`; }
+    else { ta.value = kode; ta.focus(); ta.setSelectionRange(0, kode.length); msg.textContent = "Kunne ikke kopiere automatisk. Teksten står i feltet – hold fingeren i feltet, velg «Merk alt» og så «Kopier»."; }
   };
-  app.querySelector("#ov-hent").onclick = () => {
-    const t = ta.value.trim();
-    if (!t.startsWith(OV_PREFIKS)) { msg.textContent = "Dette ser ikke ut som fremgang fra appen. Trykk «Kopier fremgangen» i den andre appen først."; return; }
+  app.querySelector("#ov-hent").onclick = async () => {
+    const t = ta.value.trim(); if (!t) { msg.textContent = "Feltet er tomt. Hold fingeren i feltet og velg «Lim inn» først."; return; }
+    try { hentInn(await lesKode(t), msg); }
+    catch (e) { msg.textContent = e && e.code === "ukjent" ? `Dette ser ikke ut som fremgang fra appen (${t.length} tegn limt inn). Trykk «Kopier fremgangen» i den andre appen på nytt.` : `Teksten ser ut til å være kuttet (${t.length} tegn). Bruk heller «Lagre som fil» og «Hent fra fil».`; }
+  };
+  app.querySelector("#ov-lagre").onclick = async () => {
+    const kode = await lagKode(), navn = `betongrehab-fremgang-${idag()}.txt`;
     try {
-      const før = Object.keys(S.kort).length;
-      flett(JSON.parse(t.slice(OV_PREFIKS.length))); lagre();
-      msg.textContent = `Hentet inn ✓ Du har nå ${Object.keys(S.kort).length} øvde kort (før: ${før}).`;
-      setTimeout(hjem, 1500);
-    } catch (_) { msg.textContent = "Klarte ikke å lese teksten. Kopier på nytt og lim inn hele."; }
+      if (!window.__OFFLINE) { const dl = await claude.use("downloads"); if (dl) { await dl.save({ filename: navn, data: kode }); msg.textContent = "Filen er lagret ✓ Åpne den andre appen og trykk «Hent fra fil»."; return; } }
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([kode], { type: "text/plain" })); a.download = navn; document.body.appendChild(a); a.click(); a.remove();
+      msg.textContent = "Filen er lagret ✓ (vanligvis i Nedlastinger / Filer). Åpne den andre appen og trykk «Hent fra fil».";
+    } catch (e) { msg.textContent = "Fikk ikke lagret filen. Prøv «Kopier fremgangen» i stedet."; }
   };
+  const fil = app.querySelector("#ov-fil");
+  app.querySelector("#ov-velg").onclick = () => fil.click();
+  fil.onchange = async () => { const f = fil.files && fil.files[0]; if (!f) return; try { hentInn(await lesKode(await f.text()), msg); } catch (_) { msg.textContent = "Klarte ikke å lese filen. Velg fila som heter betongrehab-fremgang-….txt."; } fil.value = ""; };
 }
 
 // ---------- repetisjon ----------
@@ -263,9 +299,13 @@ function hjem() {
       <button data-tema="dark" aria-pressed="${S.tema === "dark"}">☾ Mørk</button></div>
     <details class="kort" style="margin-top:12px" id="overfor"><summary><b>Flytt fremgang mellom Claude-appen og offline-appen</b></summary>
       <p class="dempet liten" style="margin:8px 0">Trykk «Kopier fremgangen» i appen du har øvd i. Åpne den andre appen, lim inn her og trykk «Hent inn». Det som er nyest av hvert kort, prøve og lytteposisjon beholdes, og ingenting går tapt.</p>
+      <p class="liten" style="margin:4px 0"><b>Med kopier og lim inn:</b></p>
       <div class="rad"><button class="hoved" id="ov-kopier">Kopier fremgangen</button></div>
-      <textarea id="ov-tekst" rows="4" placeholder="Lim inn fremgang fra den andre appen her" style="width:100%;margin:10px 0 6px;box-sizing:border-box;font-size:13px"></textarea>
+      <textarea id="ov-tekst" rows="3" placeholder="Lim inn fremgang fra den andre appen her" style="width:100%;margin:10px 0 6px;box-sizing:border-box;font-size:13px"></textarea>
       <div class="rad"><button class="sek" id="ov-hent">Hent inn</button></div>
+      <p class="liten" style="margin:14px 0 4px"><b>Eller med fil:</b></p>
+      <div class="rad"><button class="sek" id="ov-lagre">Lagre som fil</button><button class="sek" id="ov-velg">Hent fra fil</button></div>
+      <input type="file" id="ov-fil" accept=".txt,text/plain" hidden>
       <p class="liten" id="ov-msg" style="margin:8px 0 0"></p></details>`;
   binderModus();
   bindOverfor();
