@@ -1,5 +1,5 @@
 // Service worker for Betongrehab offline. Appen caches seg selv; lyd lagres når du trykker «Last ned alt».
-const APP = "app-vfa54fbce", LYD = "lyd-v1", FONT = "font-v1";
+const APP = "app-v6e263fb1", LYD = "lyd-v1", FONT = "font-v1";
 const SKALL = ["./", "index.html", "manifest.webmanifest", "ikon-192.png", "ikon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(APP).then(c => c.addAll(SKALL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("app-") && k !== APP).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -34,7 +34,7 @@ self.addEventListener("fetch", e => {
     // appen: hent nyeste når det er nett (maks 4 s), ellers lagret versjon
     e.respondWith(caches.open(APP).then(async c => {
       const key = req.mode === "navigate" ? "index.html" : req;
-      const nett = fetch(req).then(r => { if (r.ok) c.put(key, r.clone()); return r; }).catch(() => null);
+      const nett = fetch(req, { cache: "no-cache" }).then(r => { if (r.ok) c.put(key, r.clone()); return r; }).catch(() => null);
       const hit = await c.match(key, { ignoreSearch: true });
       if (!hit) return (await nett) || new Response("Offline", { status: 503 });
       return (await Promise.race([nett, new Promise(r => setTimeout(() => r(null), 4000))])) || hit;
