@@ -13,98 +13,9 @@
 <link rel="apple-touch-icon" href="ikon-180.png">
 <meta name="robots" content="noindex,nofollow">
 <script>
-// Erstatter claude.use(...) i GitHub-versjonen: Claude via egen API-nøkkel, telefonens talegjenkjenning, synk via privat gist.
+// GitHub-versjonen: ingen Claude-funksjoner og ingen nøkler. Fremgangen lagres på enheten.
 window.__OFFLINE = true;
-(function () {
-  const N = { anthropic: "br-anthropic-nokkel", github: "br-github-nokkel", gist: "br-gist-id" };
-  const hent = k => { try { return localStorage.getItem(N[k]) || ""; } catch (_) { return ""; } };
-  const MODELL = "claude-sonnet-5-5", GISTNAVN = "betongrehab-fremgang", FIL = "fremgang.json";
-  const feil = code => Object.assign(new Error(code), { code });
-
-  async function sample(prompt, opts = {}) {
-    const key = hent("anthropic"); if (!key) throw feil("not_granted");
-    if (!navigator.onLine) throw feil("offline");
-    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: {
-      "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: MODELL, max_tokens: 700, messages: [{ role: "user", content: prompt }] }) });
-    if (r.status === 429 || r.status === 529) throw feil("rate_limited");
-    if (r.status === 401 || r.status === 403) throw feil("not_granted");
-    if (!r.ok) throw feil("http_" + r.status);
-    const d = await r.json(), text = (d.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-    if (opts.onText) try { opts.onText({ text }); } catch (_) {}
-    return { text };
-  }
-
-  function lagDikt(SR) {
-    const h = { p: [], f: [], s: [] }; let rec = null, aktiv = false;
-    const state = s => h.s.forEach(f => f({ state: s }));
-    return {
-      onPartial: f => h.p.push(f), onFinal: f => h.f.push(f), onState: f => h.s.push(f),
-      start() {
-        return new Promise((ok, nei) => {
-          rec = new SR(); rec.lang = "nb-NO"; rec.continuous = true; rec.interimResults = true; aktiv = true;
-          rec.onstart = () => { state("listening"); ok(); };
-          rec.onresult = e => { let mellom = ""; for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) h.f.forEach(f => f({ text: t.trim() })); else mellom += t; } h.p.forEach(f => f({ text: mellom.trim() })); };
-          rec.onerror = e => { if (e.error === "not-allowed" || e.error === "service-not-allowed") { aktiv = false; state("idle"); nei(feil("not_granted")); } };
-          rec.onend = () => { aktiv = false; state("idle"); };
-          try { rec.start(); } catch (e) { nei(e); }
-        });
-      },
-      async stop() { if (rec && aktiv) rec.stop(); }
-    };
-  }
-
-  // privat gist som database
-  const gh = (sti, o = {}) => fetch("https://api.github.com" + sti, { ...o, headers: { Authorization: "Bearer " + hent("github"), Accept: "application/vnd.github+json", ...(o.body ? { "Content-Type": "application/json" } : {}) } });
-  async function finnGist() {
-    let id = hent("gist"); if (id) return id;
-    for (let side = 1; side <= 5; side++) {
-      const r = await gh(`/gists?per_page=100&page=${side}`); if (!r.ok) throw feil("http_" + r.status);
-      const l = await r.json(); const g = l.find(x => x.description === GISTNAVN && x.files && x.files[FIL]);
-      if (g) { localStorage.setItem(N.gist, g.id); return g.id; }
-      if (l.length < 100) break;
-    }
-    return "";
-  }
-  let ventende = null, timer = null, sistSkrevet = 0;
-  async function skriv(keepalive) {
-    if (!ventende) return; const body = JSON.stringify(ventende); ventende = null; sistSkrevet = Date.now();
-    const id = await finnGist();
-    const files = { [FIL]: { content: JSON.stringify(JSON.parse(body)) } };
-    if (id) { const b = JSON.stringify({ files }); const r = await gh("/gists/" + id, { method: "PATCH", body: b, keepalive: !!keepalive && b.length < 60000 }); if (r.status === 404) { localStorage.removeItem(N.gist); ventende = JSON.parse(body); return skriv(); } }
-    else { const r = await gh("/gists", { method: "POST", body: JSON.stringify({ description: GISTNAVN, public: false, files }) }); if (r.ok) localStorage.setItem(N.gist, (await r.json()).id); }
-  }
-  const ref = {
-    async get() {
-      if (!navigator.onLine) throw feil("offline");
-      const id = await finnGist(); if (!id) return { exists: false, data: () => null };
-      const r = await gh("/gists/" + id); if (!r.ok) throw feil("http_" + r.status);
-      const f = (await r.json()).files[FIL]; if (!f) return { exists: false, data: () => null };
-      let tekst = f.content; if (f.truncated) tekst = await (await fetch(f.raw_url)).text();
-      const d = JSON.parse(tekst); return { exists: true, data: () => d };
-    },
-    async set(obj) {
-      ventende = obj; clearTimeout(timer);
-      const vent = Math.max(0, 20000 - (Date.now() - sistSkrevet));
-      timer = setTimeout(() => { if (navigator.onLine) skriv().catch(() => {}); }, vent);
-    }
-  };
-  const flush = () => { if (ventende && navigator.onLine) { clearTimeout(timer); skriv(true).catch(() => {}); } };
-  addEventListener("pagehide", flush);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
-  addEventListener("online", () => { if (ventende) skriv().catch(() => {}); });
-
-  window.claude = {
-    async use(cap) {
-      if (cap === "sample") { if (!hent("anthropic")) throw feil("not_granted"); return sample; }
-      if (cap === "dictation") { const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) throw feil("unsupported"); return lagDikt(SR); }
-      if (cap === "user") { if (!hent("github")) throw feil("not_granted"); return { id: async () => "gist" }; }
-      if (cap === "db") { if (!hent("github")) throw feil("not_granted"); return { doc: () => ref }; }
-      throw feil("unsupported");
-    }
-  };
-  window.__nett = { N, hent, sample, ref };
-})();
+window.claude = { async use() { const e = new Error("unsupported"); e.code = "unsupported"; throw e; } };
 
 </script>
 
@@ -336,7 +247,7 @@ function hjem() {
     <details><summary>Slik virker øvingen</summary>
       <ul class="pkt">
         <li><b>Flashkort:</b> tenk ut svaret selv før du snur kortet. Vær ærlig når du vurderer deg selv.</li>
-        <li><b>Forhør:</b> skriv eller si svaret med egne ord. Claude vurderer det mot fasit og forklarer det du mangler.</li>
+        ${window.__OFFLINE ? "" : `<li><b>Forhør:</b> skriv eller si svaret med egne ord. Claude vurderer det mot fasit og forklarer det du mangler.</li>`}
         <li>Kort du kan, kommer igjen etter 1, 3, 7, 16, 35 og 90 dager. Kort du ikke kan, kommer igjen samme dag.</li>
         <li>Dagens økt tar alle kort som er forfalt og opptil ${NYE_PER_DAG} nye, i bokens rekkefølge.</li>
         <li>«Mestret» betyr at du har kunnet kortet minst tre ganger på rad.</li>
@@ -365,6 +276,7 @@ function kapKnapp(k) {
     
 }
 function modusvelger() {
+  if (window.__OFFLINE) return "";
   return `<div class="modus" role="group" aria-label="Øvemåte">
     <button data-m="flash" aria-pressed="${S.modus !== "forhor"}">Flashkort</button>
     <button data-m="forhor" aria-pressed="${S.modus === "forhor"}">Forhør med Claude</button></div>`;
@@ -377,7 +289,7 @@ function binderModus() {
 }
 function visLagring() {
   const el = app.querySelector("#lagring"); if (!el) return;
-  el.textContent = dbRef ? (window.__OFFLINE ? "Fremgangen synkes via GitHub-kontoen din og følger deg mellom mobil og PC." : "Fremgangen lagres på kontoen din og følger deg mellom mobil og PC.") : (window.__OFFLINE ? "Fremgangen lagres på denne telefonen. Synk med GitHub slås på under «Nett-funksjoner» nederst." : "Fremgangen lagres bare i denne nettleseren.");
+  el.textContent = dbRef ? (window.__OFFLINE ? "Fremgangen synkes via GitHub-kontoen din og følger deg mellom mobil og PC." : "Fremgangen lagres på kontoen din og følger deg mellom mobil og PC.") : (window.__OFFLINE ? "Fremgangen lagres på denne telefonen. Bruk «Flytt fremgang» nederst for å ta den med til Claude-appen." : "Fremgangen lagres bare i denne nettleseren.");
 }
 function kapittel(nr) {
   const k = KAP[nr]; if (!k) return hjem();
@@ -429,7 +341,7 @@ function startØkt(liste, navn) {
 function visKort() {
   if (!økt) return hjem();
   if (!økt.kø.length) return ferdig();
-  const c = KORT_ID[økt.kø[0]], k = KAP[c.kap], forhør = S.modus === "forhor" && c.type === "spm";
+  const c = KORT_ID[økt.kø[0]], k = KAP[c.kap], forhør = !window.__OFFLINE && S.modus === "forhor" && c.type === "spm";
   const gjort = økt.antall - økt.kø.length;
   app.innerHTML = `
     <button class="tilbake" id="avslutt">← Avslutt økta</button>
@@ -858,45 +770,9 @@ window.__OFFLINE = true;
     const b = el.querySelector("#lastned"); if (b) b.onclick = lastNed;
   }
 
-  function visNett() {
-    const off = document.getElementById("offline-kort"); if (!off) return;
-    let el = document.getElementById("nett-kort");
-    if (!el) { el = document.createElement("div"); el.id = "nett-kort"; off.after(el); }
-    const n = window.__nett, harA = !!n.hent("anthropic"), harG = !!n.hent("github");
-    el.innerHTML = `<details class="kort" style="margin-top:12px"><summary><b>Nett-funksjoner</b> <span class="dempet liten">${harA ? "Claude ✓" : "Claude av"} · ${harG ? "synk ✓" : "synk av"}</span></summary>
-      <p class="dempet liten" style="margin:8px 0">Brukes bare når telefonen har nett. Nøklene lagres kun på denne enheten.</p>
-      <label class="liten"><b>Claude API-nøkkel</b> – vurderer svarene i muntlig forhør. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Lag nøkkel</a></label>
-      <input id="n-a" type="password" autocomplete="off" placeholder="${harA ? "lagret – lim inn ny for å bytte" : "sk-ant-…"}" style="width:100%;margin:4px 0 12px;padding:10px;box-sizing:border-box">
-      <label class="liten"><b>GitHub-nøkkel (gist)</b> – synker fremgangen mellom mobil og PC. <a href="https://github.com/settings/tokens/new?scopes=gist&description=Betongrehab%20synk" target="_blank" rel="noopener">Lag nøkkel</a></label>
-      <input id="n-g" type="password" autocomplete="off" placeholder="${harG ? "lagret – lim inn ny for å bytte" : "ghp_…"}" style="width:100%;margin:4px 0 12px;padding:10px;box-sizing:border-box">
-      <div class="rad"><button class="hoved" id="n-lagre">Lagre og test</button>${harA || harG ? `<button class="sek" id="n-fjern">Fjern nøklene</button>` : ""}</div>
-      <p class="liten" id="n-msg" style="margin:8px 0 0"></p></details>`;
-    const msg = el.querySelector("#n-msg");
-    el.querySelector("#n-lagre").onclick = async () => {
-      const a = el.querySelector("#n-a").value.trim(), g = el.querySelector("#n-g").value.trim();
-      if (!a && !g) { msg.textContent = "Lim inn minst én nøkkel."; return; }
-      if (!navigator.onLine) { msg.textContent = "Du må ha nett for å teste nøklene."; return; }
-      msg.textContent = "Tester …"; const ut = [];
-      if (a) {
-        try { const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": a, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 5, messages: [{ role: "user", content: "Si ok" }] }) });
-          if (r.ok) { localStorage.setItem(n.N.anthropic, a); ut.push("Claude-nøkkelen virker ✓"); }
-          else ut.push(r.status === 401 ? "Claude-nøkkelen ble avvist – sjekk at du limte inn hele." : r.status === 400 || r.status === 402 ? "Claude-nøkkelen er gyldig, men kontoen mangler kreditt (fyll på under Billing)." : "Claude svarte med feil " + r.status + ".");
-        } catch (_) { ut.push("Fikk ikke kontakt med Claude."); }
-      }
-      if (g) {
-        try { const r = await fetch("https://api.github.com/gists?per_page=1", { headers: { Authorization: "Bearer " + g, Accept: "application/vnd.github+json" } });
-          if (r.ok) { localStorage.setItem(n.N.github, g); localStorage.removeItem(n.N.gist); ut.push("GitHub-nøkkelen virker ✓"); }
-          else ut.push(r.status === 401 ? "GitHub-nøkkelen ble avvist." : r.status === 403 || r.status === 404 ? "GitHub-nøkkelen mangler tilgang til gist." : "GitHub svarte med feil " + r.status + ".");
-        } catch (_) { ut.push("Fikk ikke kontakt med GitHub."); }
-      }
-      msg.textContent = ut.join(" ");
-      if (ut.some(x => x.includes("✓"))) { msg.textContent += " Starter appen på nytt …"; setTimeout(() => location.reload(), 1800); }
-    };
-    const fj = el.querySelector("#n-fjern"); if (fj) fj.onclick = () => { for (const k of Object.values(n.N)) localStorage.removeItem(k); location.reload(); };
-  }
-  window.__visOffline = () => { tegn(); visNett(); };
+  window.__visOffline = () => tegn();
   window.__offline = { lastNed, lagret };
-  tegn(); visNett();
+  tegn();
 })();
 
 </script>
