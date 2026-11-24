@@ -283,7 +283,7 @@ function kapKnapp(k) {
       const tot = KORT.filter(c => c.kap === k.nr).length, m = mestret(k.nr);
       const t = S.tester && S.tester[k.nr], best = t ? t.best : 0;
       return `<button class="kap" data-kap="${k.nr}"><span class="nr">${(erG(k.nr) ? "G" + k.nr.slice(1) : k.nr)}</span><span class="t">${esc(k.tittel)}</span>
-        <span class="p">${t ? `prøve ${best} %` : (MCQ[k.nr] || []).length ? "ikke testet" : "les"}${tot ? ` · kort ${m}/${tot}` : ""}${hort(k.nr) ? " · hørt" : ""}</span><span class="bar"><i style="width:${best}%;background:${best >= 80 ? "var(--gronn)" : "var(--gul)"}"></i></span></button>`;
+        <span class="p">${t ? `prøve ${best} %` : (MCQ[k.nr] || []).length ? "ikke testet" : "les"}${hort(k.nr) ? " · hørt" : ""}</span><span class="bar"><i style="width:${best}%;background:${best >= 80 ? "var(--gronn)" : "var(--gul)"}"></i></span></button>`;
     
 }
 function modusvelger() {
