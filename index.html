@@ -256,6 +256,27 @@ function flett(fra) {
   if (fra.nyeIdag && fra.nyeIdag.dato === idag() && (!S.nyeIdag || S.nyeIdag.dato !== idag() || fra.nyeIdag.n > S.nyeIdag.n)) S.nyeIdag = fra.nyeIdag;
 }
 
+// ---------- flytt fremgang mellom appene ----------
+const OV_PREFIKS = "BETONGREHAB-FREMGANG:";
+function bindOverfor() {
+  const ta = app.querySelector("#ov-tekst"), msg = app.querySelector("#ov-msg"); if (!ta) return;
+  app.querySelector("#ov-kopier").onclick = async () => {
+    const kode = OV_PREFIKS + JSON.stringify(S);
+    try { await navigator.clipboard.writeText(kode); msg.textContent = "Kopiert ✓ Åpne den andre appen og lim inn under «Flytt fremgang»."; }
+    catch (_) { ta.value = kode; ta.focus(); ta.select(); msg.textContent = "Teksten er markert i feltet over – trykk Kopier (eller hold fingeren og velg Kopier)."; }
+  };
+  app.querySelector("#ov-hent").onclick = () => {
+    const t = ta.value.trim();
+    if (!t.startsWith(OV_PREFIKS)) { msg.textContent = "Dette ser ikke ut som fremgang fra appen. Trykk «Kopier fremgangen» i den andre appen først."; return; }
+    try {
+      const før = Object.keys(S.kort).length;
+      flett(JSON.parse(t.slice(OV_PREFIKS.length))); lagre();
+      msg.textContent = `Hentet inn ✓ Du har nå ${Object.keys(S.kort).length} øvde kort (før: ${før}).`;
+      setTimeout(hjem, 1500);
+    } catch (_) { msg.textContent = "Klarte ikke å lese teksten. Kopier på nytt og lim inn hele."; }
+  };
+}
+
 // ---------- repetisjon ----------
 const st = id => S.kort[id] || { b: 0, due: 0, n: 0, r: 0 };
 const forfalt = () => KORT.filter(c => { const s = S.kort[c.id]; return s && s.n > 0 && s.due <= nå(); }).sort((a, b) => st(a.id).due - st(b.id).due);
@@ -319,8 +340,15 @@ function hjem() {
         <li>Kort du kan, kommer igjen etter 1, 3, 7, 16, 35 og 90 dager. Kort du ikke kan, kommer igjen samme dag.</li>
         <li>Dagens økt tar alle kort som er forfalt og opptil ${NYE_PER_DAG} nye, i bokens rekkefølge.</li>
         <li>«Mestret» betyr at du har kunnet kortet minst tre ganger på rad.</li>
-      </ul></details>`;
+      </ul></details>
+    <details class="kort" style="margin-top:12px" id="overfor"><summary><b>Flytt fremgang mellom Claude-appen og offline-appen</b></summary>
+      <p class="dempet liten" style="margin:8px 0">Trykk «Kopier fremgangen» i appen du har øvd i. Åpne den andre appen, lim inn her og trykk «Hent inn». Det som er nyest av hvert kort, prøve og lytteposisjon beholdes, og ingenting går tapt.</p>
+      <div class="rad"><button class="hoved" id="ov-kopier">Kopier fremgangen</button></div>
+      <textarea id="ov-tekst" rows="4" placeholder="Lim inn fremgang fra den andre appen her" style="width:100%;margin:10px 0 6px;box-sizing:border-box;font-size:13px"></textarea>
+      <div class="rad"><button class="sek" id="ov-hent">Hent inn</button></div>
+      <p class="liten" id="ov-msg" style="margin:8px 0 0"></p></details>`;
   binderModus();
+  bindOverfor();
   app.querySelector("#start").onclick = () => startØkt([...forfalt().slice(0, MAKS_REP), ...nyeKort().slice(0, nyeIgjenIdag())], "Dagens økt");
   app.querySelectorAll("[data-kap]").forEach(b => b.onclick = () => { location.hash = "kap-" + b.dataset.kap; });
   app.querySelector("#blandet").onclick = () => startTest("alle");
