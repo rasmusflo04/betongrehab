@@ -159,6 +159,7 @@ function flett(fra) {
   for (const [id, l] of Object.entries(fra.lyd || {})) { const m = S.lyd[id]; if (!m || (l.t || 0) > (m.t || 0)) S.lyd[id] = l; }
   if (fra.sistLyd && (!S.sistLyd || (fra.sistLyd.t || 0) > (S.sistLyd.t || 0))) S.sistLyd = fra.sistLyd;
   if (fra.fart && !S.fart) S.fart = fra.fart;
+  if (fra.tema && !S.tema) { S.tema = fra.tema; settTema(); }
   if (fra.visTekst !== undefined && S.visTekst === undefined) S.visTekst = fra.visTekst;
   S.tester = S.tester || {};
   for (const [nr, t] of Object.entries(fra.tester || {})) { const m = S.tester[nr]; if (!m || (t.dato || "") > (m.dato || "") || (t.best || 0) > (m.best || 0)) S.tester[nr] = { ...t, best: Math.max(t.best || 0, (m && m.best) || 0) }; }
@@ -166,6 +167,10 @@ function flett(fra) {
   if (fra.modus && !localStorage.getItem("betongrehab-ovelse")) S.modus = fra.modus;
   if (fra.nyeIdag && fra.nyeIdag.dato === idag() && (!S.nyeIdag || S.nyeIdag.dato !== idag() || fra.nyeIdag.n > S.nyeIdag.n)) S.nyeIdag = fra.nyeIdag;
 }
+
+// ---------- lys / mørk ----------
+function settTema() { const t = S.tema; document.documentElement.style.colorScheme = t === "light" ? "light" : t === "dark" ? "dark" : ""; }
+settTema();
 
 // ---------- flytt fremgang mellom appene ----------
 const OV_PREFIKS = "BETONGREHAB-FREMGANG:";
@@ -252,6 +257,10 @@ function hjem() {
         <li>Dagens økt tar alle kort som er forfalt og opptil ${NYE_PER_DAG} nye, i bokens rekkefølge.</li>
         <li>«Mestret» betyr at du har kunnet kortet minst tre ganger på rad.</li>
       </ul></details>
+    <div class="modus" role="group" aria-label="Utseende" id="tema" style="margin-top:16px">
+      <button data-tema="auto" aria-pressed="${!S.tema || S.tema === "auto"}">Auto</button>
+      <button data-tema="light" aria-pressed="${S.tema === "light"}">☀ Lys</button>
+      <button data-tema="dark" aria-pressed="${S.tema === "dark"}">☾ Mørk</button></div>
     <details class="kort" style="margin-top:12px" id="overfor"><summary><b>Flytt fremgang mellom Claude-appen og offline-appen</b></summary>
       <p class="dempet liten" style="margin:8px 0">Trykk «Kopier fremgangen» i appen du har øvd i. Åpne den andre appen, lim inn her og trykk «Hent inn». Det som er nyest av hvert kort, prøve og lytteposisjon beholdes, og ingenting går tapt.</p>
       <div class="rad"><button class="hoved" id="ov-kopier">Kopier fremgangen</button></div>
@@ -260,6 +269,7 @@ function hjem() {
       <p class="liten" id="ov-msg" style="margin:8px 0 0"></p></details>`;
   binderModus();
   bindOverfor();
+  app.querySelectorAll("[data-tema]").forEach(b => b.onclick = () => { S.tema = b.dataset.tema; lagre(); settTema(); hjem(); });
   app.querySelector("#start").onclick = () => startØkt([...forfalt().slice(0, MAKS_REP), ...nyeKort().slice(0, nyeIgjenIdag())], "Dagens økt");
   app.querySelectorAll("[data-kap]").forEach(b => b.onclick = () => { location.hash = "kap-" + b.dataset.kap; });
   app.querySelector("#blandet").onclick = () => startTest("alle");
@@ -661,7 +671,7 @@ async function visTekst() {
     const id = spiller.id, a = await hentTekst(id);
     if (spiller.id !== id) return;
     tekst = { id, avsnitt: a || [] }; aktiv = -1;
-    tvt.innerHTML = a ? a.map(([t, x], i) => `<p data-i="${i}" class="${i === 0 ? "ov" : ""}">${esc(x)}</p>`).join("") : `<p>Fant ikke teksten til dette kapitlet.</p>`;
+    tvt.innerHTML = a ? a.map(([t, x], i) => `<p data-i="${i}" class="${i === 0 ? "ov" : ""}">${esc(x.replace(/([?!:])\.$/, "$1"))}</p>`).join("") : `<p>Fant ikke teksten til dette kapitlet.</p>`;
   }
   folger = true; tvf.hidden = true; oppdaterTekst(true);
 }
