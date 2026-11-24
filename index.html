@@ -193,11 +193,6 @@ async function lesKode(t) {
   if (i >= 0) return JSON.parse(t.slice(i + OV_GAMMEL.length).trim());
   throw Object.assign(new Error("ukjent"), { code: "ukjent" });
 }
-async function kopier(tekst, ta) {
-  try { await navigator.clipboard.writeText(tekst); return true; } catch (_) {}
-  try { ta.value = tekst; ta.readOnly = true; ta.focus(); ta.setSelectionRange(0, tekst.length); const ok = document.execCommand("copy"); ta.readOnly = false; if (ok) return true; } catch (_) {}
-  return false;
-}
 function hentInn(data, msg) {
   const før = Object.keys(S.kort).length, førT = Object.keys(S.tester || {}).length;
   flett(data); lagre();
@@ -205,24 +200,14 @@ function hentInn(data, msg) {
   setTimeout(hjem, 2500);
 }
 function bindOverfor() {
-  const ta = app.querySelector("#ov-tekst"), msg = app.querySelector("#ov-msg"); if (!ta) return;
-  app.querySelector("#ov-kopier").onclick = async () => {
-    const kode = await lagKode();
-    if (await kopier(kode, ta)) { ta.value = ""; msg.textContent = `Kopiert ✓ (${kode.length} tegn). Åpne den andre appen og lim inn under «Flytt fremgang».`; }
-    else { ta.value = kode; ta.focus(); ta.setSelectionRange(0, kode.length); msg.textContent = "Kunne ikke kopiere automatisk. Teksten står i feltet – hold fingeren i feltet, velg «Merk alt» og så «Kopier»."; }
-  };
-  app.querySelector("#ov-hent").onclick = async () => {
-    const t = ta.value.trim(); if (!t) { msg.textContent = "Feltet er tomt. Hold fingeren i feltet og velg «Lim inn» først."; return; }
-    try { hentInn(await lesKode(t), msg); }
-    catch (e) { msg.textContent = e && e.code === "ukjent" && t.length > 600 ? `Dette ser ikke ut som fremgang fra appen (${t.length} tegn). Trykk «Kopier fremgangen» i den andre appen på nytt.` : `Teksten kom ikke med i sin helhet (${t.length} tegn) – kopieringen kuttet den. Bruk «Lagre som fil» i den andre appen og «Hent fra fil» her.`; }
-  };
+  const msg = app.querySelector("#ov-msg"); if (!msg) return;
   app.querySelector("#ov-lagre").onclick = async () => {
     const kode = await lagKode(), navn = `betongrehab-fremgang-${idag()}.txt`;
     try {
       if (!window.__OFFLINE) { const dl = await claude.use("downloads"); if (dl) { await dl.save({ filename: navn, data: kode }); msg.textContent = "Filen er lagret ✓ Åpne den andre appen og trykk «Hent fra fil»."; return; } }
       const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([kode], { type: "text/plain" })); a.download = navn; document.body.appendChild(a); a.click(); a.remove();
       msg.textContent = "Filen er lagret ✓ (vanligvis i Nedlastinger / Filer). Åpne den andre appen og trykk «Hent fra fil».";
-    } catch (e) { msg.textContent = "Fikk ikke lagret filen. Prøv «Kopier fremgangen» i stedet."; }
+    } catch (e) { msg.textContent = "Fikk ikke lagret filen. Prøv igjen."; }
   };
   const fil = app.querySelector("#ov-fil");
   app.querySelector("#ov-velg").onclick = () => fil.click();
@@ -298,15 +283,10 @@ function hjem() {
       <button data-tema="light" aria-pressed="${S.tema === "light"}">☀ Lys</button>
       <button data-tema="dark" aria-pressed="${S.tema === "dark"}">☾ Mørk</button></div>
     <details class="kort" style="margin-top:12px" id="overfor"><summary><b>Flytt fremgang mellom Claude-appen og offline-appen</b></summary>
-      <p class="dempet liten" style="margin:8px 0">Trykk «Kopier fremgangen» i appen du har øvd i. Åpne den andre appen, lim inn her og trykk «Hent inn». Det som er nyest av hvert kort, prøve og lytteposisjon beholdes, og ingenting går tapt.</p>
-      <p class="liten" style="margin:4px 0"><b>Med kopier og lim inn:</b></p>
-      <div class="rad"><button class="hoved" id="ov-kopier">Kopier fremgangen</button></div>
-      <textarea id="ov-tekst" rows="3" placeholder="Lim inn fremgang fra den andre appen her" style="width:100%;margin:10px 0 6px;box-sizing:border-box;font-size:13px"></textarea>
-      <div class="rad"><button class="sek" id="ov-hent">Hent inn</button></div>
-      <p class="liten" style="margin:14px 0 4px"><b>Eller med fil:</b></p>
-      <div class="rad"><button class="sek" id="ov-lagre">Lagre som fil</button><button class="sek" id="ov-velg">Hent fra fil</button></div>
-      <input type="file" id="ov-fil" accept=".txt,text/plain" hidden>
-      <p class="liten" id="ov-msg" style="margin:8px 0 0"></p></details>`;
+      <p class="dempet liten" style="margin:8px 0">Trykk «Lagre som fil» i appen du har øvd i. Åpne den andre appen, trykk «Hent fra fil» og velg den nyeste fila (betongrehab-fremgang-dato.txt). Det som er nyest av hvert kort, prøve og lytteposisjon beholdes, og ingenting går tapt.</p>
+      <div class="rad"><button class="hoved" id="ov-lagre">Lagre som fil</button><button class="sek" id="ov-velg">Hent fra fil</button></div>
+      <p class="liten" id="ov-msg" style="margin:8px 0 0"></p>
+      <input type="file" id="ov-fil" accept=".txt,text/plain" hidden></details>`;
   binderModus();
   bindOverfor();
   app.querySelectorAll("[data-tema]").forEach(b => b.onclick = () => { S.tema = b.dataset.tema; lagre(); settTema(); hjem(); });
@@ -825,7 +805,7 @@ window.__OFFLINE = true;
     el.innerHTML = `<div class="kort" style="margin-top:12px"><b>${alt ? "✓ Alt er lagret for offline" : "Offline"}</b>
       <p class="dempet liten" style="margin:4px 0 ${alt ? 0 : 10}px">${alt ? `Alle ${kap.length} lydkapitler og tekstene ligger på telefonen. Appen virker uten nett.` : `${ok} av ${kap.length} lydkapitler er lagret på telefonen.${feil ? ` ${feil} filer feilet – prøv igjen.` : ""}`}</p>
       ${alt ? "" : `<button class="hoved" id="lastned">Last ned alt (${mb(TOTAL)} MB)</button>`}
-      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 24.11 20:13. Lydfilene beholdes ved oppdatering.</p></div>`;
+      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 24.11 20:15. Lydfilene beholdes ved oppdatering.</p></div>`;
     const b = el.querySelector("#lastned"); if (b) b.onclick = lastNed;
     const u = el.querySelector("#oppdater"); if (u) u.onclick = () => navigator.onLine ? oppdater() : (el.querySelector("#oppd-msg").textContent = "Du må ha nett for å oppdatere.");
   }
