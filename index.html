@@ -214,7 +214,7 @@ function bindOverfor() {
   app.querySelector("#ov-hent").onclick = async () => {
     const t = ta.value.trim(); if (!t) { msg.textContent = "Feltet er tomt. Hold fingeren i feltet og velg «Lim inn» først."; return; }
     try { hentInn(await lesKode(t), msg); }
-    catch (e) { msg.textContent = e && e.code === "ukjent" ? `Dette ser ikke ut som fremgang fra appen (${t.length} tegn limt inn). Trykk «Kopier fremgangen» i den andre appen på nytt.` : `Teksten ser ut til å være kuttet (${t.length} tegn). Bruk heller «Lagre som fil» og «Hent fra fil».`; }
+    catch (e) { msg.textContent = e && e.code === "ukjent" && t.length > 600 ? `Dette ser ikke ut som fremgang fra appen (${t.length} tegn). Trykk «Kopier fremgangen» i den andre appen på nytt.` : `Teksten kom ikke med i sin helhet (${t.length} tegn) – kopieringen kuttet den. Bruk «Lagre som fil» i den andre appen og «Hent fra fil» her.`; }
   };
   app.querySelector("#ov-lagre").onclick = async () => {
     const kode = await lagKode(), navn = `betongrehab-fremgang-${idag()}.txt`;
@@ -825,7 +825,7 @@ window.__OFFLINE = true;
     el.innerHTML = `<div class="kort" style="margin-top:12px"><b>${alt ? "✓ Alt er lagret for offline" : "Offline"}</b>
       <p class="dempet liten" style="margin:4px 0 ${alt ? 0 : 10}px">${alt ? `Alle ${kap.length} lydkapitler og tekstene ligger på telefonen. Appen virker uten nett.` : `${ok} av ${kap.length} lydkapitler er lagret på telefonen.${feil ? ` ${feil} filer feilet – prøv igjen.` : ""}`}</p>
       ${alt ? "" : `<button class="hoved" id="lastned">Last ned alt (${mb(TOTAL)} MB)</button>`}
-      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 24.11 20:01. Lydfilene beholdes ved oppdatering.</p></div>`;
+      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 24.11 20:13. Lydfilene beholdes ved oppdatering.</p></div>`;
     const b = el.querySelector("#lastned"); if (b) b.onclick = lastNed;
     const u = el.querySelector("#oppdater"); if (u) u.onclick = () => navigator.onLine ? oppdater() : (el.querySelector("#oppd-msg").textContent = "Du må ha nett for å oppdatere.");
   }
