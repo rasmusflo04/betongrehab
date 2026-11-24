@@ -31,12 +31,13 @@ self.addEventListener("fetch", e => {
     return;
   }
   if (url.origin === location.origin) {
-    // appen: vis lagret versjon straks, hent ny i bakgrunnen
+    // appen: hent nyeste når det er nett (maks 4 s), ellers lagret versjon
     e.respondWith(caches.open(APP).then(async c => {
       const key = req.mode === "navigate" ? "index.html" : req;
-      const hit = await c.match(key, { ignoreSearch: true });
       const nett = fetch(req).then(r => { if (r.ok) c.put(key, r.clone()); return r; }).catch(() => null);
-      return hit || (await nett) || new Response("Offline", { status: 503 });
+      const hit = await c.match(key, { ignoreSearch: true });
+      if (!hit) return (await nett) || new Response("Offline", { status: 503 });
+      return (await Promise.race([nett, new Promise(r => setTimeout(() => r(null), 4000))])) || hit;
     }));
   }
 });
