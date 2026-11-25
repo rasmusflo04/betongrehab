@@ -1,5 +1,5 @@
 // Service worker for Betongrehab offline. Appen caches seg selv; lyd lagres når du trykker «Last ned alt».
-const APP = "app-vf4a18f46", LYD = "lyd-v1", FONT = "font-v1";
+const APP = "app-v936b0bd0", LYD = "lyd-v1", FONT = "font-v1";
 const SKALL = ["./", "index.html", "manifest.webmanifest", "ikon-192.png", "ikon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(APP).then(c => c.addAll(SKALL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("app-") && k !== APP).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
