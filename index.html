@@ -800,12 +800,12 @@ window.__OFFLINE = true;
   }
   async function lagret() {
     if (!("caches" in window)) return new Set();
-    const c = await caches.open("lyd-v1"); return new Set((await c.keys()).map(r => new URL(r.url).pathname.split("/lyd/")[1]));
+    const c = await caches.open("lyd-df2c6770"); return new Set((await c.keys()).map(r => new URL(r.url).pathname.split("/lyd/")[1]));
   }
   async function lastNed() {
     if (jobb) return;
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) {}
-    const har = await lagret(), c = await caches.open("lyd-v1");
+    const har = await lagret(), c = await caches.open("lyd-df2c6770");
     const mangler = FILER.filter(f => !har.has(f[0].slice(4)));
     jobb = { gjort: 0, antall: mangler.length, bytes: 0, totalt: mangler.reduce((s, f) => s + f[1], 0), feil: 0 };
     tegn();
@@ -836,7 +836,7 @@ window.__OFFLINE = true;
     el.innerHTML = `<div class="kort" style="margin-top:12px"><b>${alt ? "✓ Alt er lagret for offline" : "Offline"}</b>
       <p class="dempet liten" style="margin:4px 0 ${alt ? 0 : 10}px">${alt ? `Alle ${kap.length} lydkapitler og tekstene ligger på telefonen. Appen virker uten nett.` : `${ok} av ${kap.length} lydkapitler er lagret på telefonen.${feil ? ` ${feil} filer feilet – prøv igjen.` : ""}`}</p>
       ${alt ? "" : `<button class="hoved" id="lastned">Last ned alt (${mb(TOTAL)} MB)</button>`}
-      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 25.11 20:22. Lydfilene beholdes ved oppdatering.</p></div>`;
+      <button class="sek" id="oppdater" style="margin-top:10px">Se etter oppdatering</button><p class="liten dempet" id="oppd-msg" style="margin:6px 0 0">Versjon 25.11 20:27. Lydfilene beholdes ved oppdatering.</p></div>`;
     const b = el.querySelector("#lastned"); if (b) b.onclick = lastNed;
     const u = el.querySelector("#oppdater"); if (u) u.onclick = () => navigator.onLine ? oppdater() : (el.querySelector("#oppd-msg").textContent = "Du må ha nett for å oppdatere.");
   }
